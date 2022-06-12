@@ -5,6 +5,8 @@
       <router-link to="/index">Index</router-link> | 
       <router-link to="/about">About</router-link>
 
+      <button @click="handleClick">greet</button>
+
       <router-view></router-view>
     </div>
   </div>
@@ -15,8 +17,19 @@ export default {
   name: 'App',
   components: {
     
+  },
+  methods: {
+    async handleClick() {
+      const share = await window.System.import('@mmc-site/share')
+
+      share?.greet('@mmc-site/report')
+    }
   }
 }
 </script>
 
-<style></style>
+<style>
+#app {
+  text-align: center;
+}
+</style>
