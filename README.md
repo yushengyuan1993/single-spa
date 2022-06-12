@@ -91,3 +91,326 @@
   3. `utility modules`：公共模块应用，非渲染组件，用于跨应用共享javascript 逻辑的微应用。
 
 #### 3.2 创建容器应用
+1. 安装 `single-spa` 脚手架工具：
+  ```sh
+  npm instal create-single-spa -g
+  ```
+2. 创建微前端应用目录： `mkdir mmc-site && cd "$_"`
+3. 创建容器应用：`create-single-spa`
+   1. 项目名称：root
+   2. 选择微应用类型：single-spa root config
+   3. 组织名称：mmc-site
+4. 启动应用：`npm start`
+5. root config 模板文件：`src/index.ejs`
+6. root config 入口文件：`src/[项目名称]-root-config.js`
+
+#### 3.3 创建不依赖框架的应用
+1. 初始化：
+   1. `mkdir store && cd "$_"`
+   2. 初始化项目：
+      1. `npm init -y`
+      2. 安装依赖：`npm install @babel/core single-spa webpack webpack-cli webpack-config-single-spa webpack-dev-server webpack-merge -D`
+2. 修改配置：
+   webpack：
+    ```js
+    // webpack.config.js
+    const webpackMerge = require('webpack-merge');
+    const singleSpaDefaults = require('webpack-config-single-spa');
+
+    module.exports = webpackConfigEnv => {
+      const defaultConfig = singleSpaDefaults({
+        // The name of the organization this application is written for
+        orgName: 'mmc-site',
+        // The name of the current project. This usually matches the git repo's name
+        projectName: 'store',
+        // See https://webpack.js.org/guides/environment-variables/#root for explanation of webpackConfigEnv
+        webpackConfigEnv,
+      })
+      return webpackMerge.merge(defaultConfig, {
+        // modify the webpack config however you'd like to by adding to this object
+        devServer: {
+          port: 9001
+        }
+      })
+    }
+    ```
+   添加启动命令：
+    ```json
+    // package.json
+    scripts: {
+      "start": "webpack server"
+    }
+    ```
+3. 添加应用内容：
+    ```js
+    // src/mmc-site-store.js
+    let appContainer = null
+
+    export const bootstrap = async () => {
+    console.log('store 初始化')
+    }
+    export const mount = async () => {
+    console.log('store 挂载')
+
+    appContainer = document.createElement('div')
+    appContainer.id = 'app-store'
+    appContainer.innerHTML = 'hello mmc-site-store'
+
+    document.body.appendChild(appContainer)
+    }
+    export const unmount = async () => {
+    console.log('store 卸载')
+
+    document.body.removeChild(appContainer)
+    }
+    ```
+4. 在容器应用中注册该微应用
+    ```js
+    // root/src/mmc-site-root-config.js
+    // 修改默认应用
+    const loadingWelcome = () => {
+      return System.import(
+        "https://unpkg.com/single-spa-welcome/dist/single-spa-welcome.js"
+      )
+    }
+    registerApplication(
+      '@single-spa/welcome',
+      loadingWelcome,
+      location => location.pathname === '/'
+    );
+
+    // 注册 store 应用
+    registerApplication({
+      name: "@mmc-site/store",
+      app: () => System.import("@mmc-site/store"),
+      activeWhen: ["/store"]
+    });
+    ```
+5. 在模板文件中指定模块访问地址
+    ```js
+    // root/src/index.ejs
+    <script type="systemjs-importmap">
+      {
+        "imports": {
+          "@mmc-site/root-config": "//localhost:9000/mmc-site-root-config.js",
+          
+          // 指定访问地址
+          "@mmc-site/store": "//localhost:9001/mmc-site-store.js"
+        }
+      }
+    </script>
+    ```
+#### 3.4 创建基于 Vue 的应用
+1. 初始化：
+   1. `create-single-spa`
+   2. 项目名称：report 
+   3. 选择微应用类型：single-spa application parcel
+   4. 框架类型： Vue2
+   5. 组织名称：mmc-site
+2. 提取公共模块
+    ```js
+    // vue.config.js
+    module.exports = {
+      chainWebpack: config => {
+        config.externals(['vue', 'vue-router'])
+      },  
+      devServer: {
+        port: 9002
+      }
+    }
+    ```
+
+    ```js
+    // root/src/index.ejs
+
+    <script type="systemjs-importmap">
+      {
+        "imports": {
+          "single-spa": "https://cdn.jsdelivr.net/npm/single-spa@5.9.0/lib/system/single-spa.min.js",
+          "vue": "https://cdn.jsdelivr.net/npm/vue@2.6.11/dist/vue.min.js",
+          "vue-router": "https://cdn.jsdelivr.net/npm/vue-router@3.0.6/dist/vue-router.min.js"
+        }
+      }
+    </script>
+    ```
+3. 修改启动命令
+    ```json
+    // package.json
+    "scripts": {
+      "start": "npm run serve"
+    }
+    ```
+4. 修改入口文件 main.js
+    ```js
+    import Vue from 'vue';
+    import VueRouter from 'vue-router';
+    import singleSpaVue from 'single-spa-vue';
+
+    import App from './App.vue';
+
+    Vue.config.productionTip = false;
+
+    Vue.use(VueRouter)
+
+    const Index = {
+      template: '<div>Index</div>'
+    }
+    const About = {
+      template: '<div>About</div>'
+    }
+
+    const routes = [
+      { path: '/index', component: Index },
+      { path: '/about', component: About }
+    ]
+
+    const router = new VueRouter({
+      routes,
+      mode: 'history',
+      base: '/report'
+    })
+
+    const vueLifecycles = singleSpaVue({
+      Vue,
+      appOptions: {
+        router,
+        render(h) {
+          return h(App, {
+            props: {
+              // single-spa props are available on the "this" object. Forward them to your component as needed.
+              // https://single-spa.js.org/docs/building-applications#lifecycle-props
+              // if you uncomment these, remember to add matching prop definitions for them in your App.vue file.
+              /*
+              name: this.name,
+              mountParcel: this.mountParcel,
+              singleSpa: this.singleSpa,
+              */
+            },
+          });
+        },
+      },
+    });
+
+    export const bootstrap = vueLifecycles.bootstrap;
+    export const mount = vueLifecycles.mount;
+    export const unmount = vueLifecycles.unmount;
+    ```
+5. 修改入口模板 App.vue 
+    ```html
+    <template>
+      <div id="app">
+        <img alt="Vue logo" src="./assets/logo.png">
+        <div>
+          <router-link to="/index">Index</router-link> | 
+          <router-link to="/about">About</router-link>
+
+          <router-view></router-view>
+        </div>
+      </div>
+    </template>
+
+    <script>
+    export default {
+      name: 'App',
+      components: {
+        
+      }
+    }
+    </script>
+
+    <style>
+    #app {
+      text-align: center;
+    }
+    </style>
+
+    ```
+6. 在容器应用中注册该微应用
+    ```js
+    // root/src/mmc-site-root-config.js
+
+    // 注册 report 应用
+    registerApplication({
+      name: "@mmc-site/report",
+      app: () => System.import("@mmc-site/report"),
+      activeWhen: ["/report"]
+    });
+    ```
+7. 在模板文件中指定模块访问地址
+    ```js
+    // root/src/index.ejs
+    <script type="systemjs-importmap">
+      {
+        "imports": {
+          "@mmc-site/root-config": "//localhost:9000/mmc-site-root-config.js",
+          "@mmc-site/report": "//localhost:9001/mmc-site-store.js",
+
+          // 指定访问地址
+          "@mmc-site/report": "//localhost:9002/js/app.js"
+        }
+      }
+    </script>
+    ```
+
+#### 3.4 创建跨应用共享逻辑utility module
+> 无需注册
+1. 初始化：
+   1. `create-single-spa`
+   2. 项目名称：share
+   3. 选择微应用类型：in-browser utility module
+   4. 框架类型： none
+   5. 包管理工具：npm
+   6. 组织名称：mmc-site
+
+2. 修改端口号
+    ```js
+    // webpack.config.js
+
+    return merge(defaultConfig, {
+      // modify the webpack config however you'd like to by adding to this object
+      devServer: {
+        port: 9003
+      }
+    });
+    ```
+3. 在模板文件中指定模块访问地址
+    ```js
+    // root/src/index.ejs
+    <script type="systemjs-importmap">
+      {
+        "imports": {
+          "@mmc-site/root-config": "//localhost:9000/mmc-site-root-config.js",
+          "@mmc-site/report": "//localhost:9001/mmc-site-store.js",
+          "@mmc-site/report": "//localhost:9002/js/app.js",
+
+          // 指定访问地址
+          "@mmc-site/share": "//localhost:9003/mmc-site-share.js"
+        }
+      }
+    </script>
+    ```
+4. 编写公共代码
+    ```js
+    // share/src/mmc-site-share.js
+
+    export const greet = (app) => {
+      console.log(`%cgreeting from ${app}`, 'color: #66b587');
+    }
+    ```
+5. 使用公共模块(以Vue微应用为例)
+    ```js
+    // report/src/App.vue
+
+    <button @click="handleClick">greet</button>
+
+    methods: {
+      async handleClick() {
+        const share = await window.System.import('@mmc-site/share')
+
+        share?.greet('@mmc-site/report')
+      }
+    }
+    ```
+
+
+## 思考： 如何实现跨应用通信？
