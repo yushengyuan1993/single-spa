@@ -35,7 +35,7 @@ registerApplication({
 /**
  * mmc-site-report 子应用
  */
- registerApplication({
+registerApplication({
   name: "@mmc-site/report",
   app: () => System.import("@mmc-site/report"),
   activeWhen: ["/report"]
